@@ -2,17 +2,18 @@ name: Scrape Porter James
 
 on:
   # Scheduled: every Tuesday at 20:00 UTC
+  # (If you're in CET/CEST, that's 21:00-22:00 local time)
   schedule:
     - cron: "0 20 * * 2"
 
-  # Manual trigger from GitHub UI
+  # Manual trigger from GitHub UI (allows running on demand)
   workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
 
-    # Prevent multiple concurrent runs (no point running twice at once)
+    # Prevent multiple concurrent runs
     concurrency:
       group: porter-james-scraper
       cancel-in-progress: false
@@ -36,27 +37,29 @@ jobs:
           restore-keys: |
             huggingface-siglip-${{ runner.os }}-
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libgl1-mesa-glx  # needed by OpenCV/Pillow
-
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Run scraper
+        id: scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python main.py
+        run: |
+          python main.py 2>&1 | tee scraper_output.log
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_ENV
 
-      - name: Upload scraper logs
+      - name: Upload scraper output
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: scraper-output
-          path: .data/*.log
-          retention-days: 7
-          if-no-files-found: ignore
+          name: scraper-run-log
+          path: scraper_output.log
+          retention-days: 30
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::warning::Porter James scraper failed! Check the run logs for details."

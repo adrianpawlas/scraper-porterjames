@@ -23,9 +23,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# HuggingFace cache (will be restored by CI)
-~/.cache/huggingface/
-
 # Distribution
 *.egg-info/
 dist/
