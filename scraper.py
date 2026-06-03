@@ -303,7 +303,7 @@ def transform_product(
         "size": size_str,
         "second_hand": config.SECOND_HAND,
         "image_embedding": None,  # filled later by embedder
-        "country": config.COUNTRY,
+        "country": None,  # always NULL
         "compressed_image_url": None,
         "tags": tags,
         "search_vector": None,
