@@ -1,0 +1,16 @@
+# Web scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Embeddings
+torch>=2.0.0
+transformers>=4.36.0
+Pillow>=10.0.0
+sentencepiece>=0.1.99
+
+# Database
+supabase>=1.0.0
+
+# Utilities
+tqdm>=4.65.0
+python-dotenv>=1.0.0

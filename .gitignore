@@ -1,0 +1,32 @@
+# Project data directory (downloaded images, etc.)
+.data/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# HuggingFace cache (will be restored by CI)
+~/.cache/huggingface/
+
+# Distribution
+*.egg-info/
+dist/
+build/

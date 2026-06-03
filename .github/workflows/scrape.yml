@@ -1,0 +1,62 @@
+name: Scrape Porter James
+
+on:
+  # Scheduled: every Tuesday at 20:00 UTC
+  schedule:
+    - cron: "0 20 * * 2"
+
+  # Manual trigger from GitHub UI
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    # Prevent multiple concurrent runs (no point running twice at once)
+    concurrency:
+      group: porter-james-scraper
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: huggingface-siglip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            huggingface-siglip-${{ runner.os }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1-mesa-glx  # needed by OpenCV/Pillow
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python main.py
+
+      - name: Upload scraper logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-output
+          path: .data/*.log
+          retention-days: 7
+          if-no-files-found: ignore
