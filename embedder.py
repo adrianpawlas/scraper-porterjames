@@ -4,8 +4,11 @@ Uses google/siglip-base-patch16-384 from HuggingFace to produce 768-dimensional
 embeddings for both images and text.
 """
 
+import io
+import logging
 import os
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional
 
@@ -14,9 +17,13 @@ import torch
 from PIL import Image
 from transformers import AutoModel, AutoProcessor
 
-import io
-
 import config
+
+# Suppress noisy SigLip model config warnings about bos/eos token ids
+# These are known harmless warnings for the SigLip architecture
+logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore", message=".*bos_token_id.*should be.*")
+warnings.filterwarnings("ignore", message=".*eos_token_id.*should be.*")
 
 
 def download_image(url: str, timeout: int = 15) -> Optional[Image.Image]:

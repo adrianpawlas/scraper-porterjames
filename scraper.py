@@ -37,6 +37,8 @@ def fetch_product_json(handle: str) -> Optional[Dict]:
     """Fetch the full JSON data for a single product by its handle.
 
     Shopify exposes product data at /products/{handle}.json
+    Uses exponential backoff with special handling for 429 rate limits
+    (checks Retry-After header, longer waits).
     """
     url = f"{config.BASE_URL}/products/{handle}.json"
     for attempt in range(config.MAX_RETRIES):
@@ -45,8 +47,22 @@ def fetch_product_json(handle: str) -> Optional[Dict]:
             resp.raise_for_status()
             return resp.json().get("product")
         except requests.RequestException as e:
+            is_rate_limit = isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 429
+
             if attempt < config.MAX_RETRIES - 1:
-                wait = 2 ** attempt
+                if is_rate_limit:
+                    # Try Retry-After header first, fall back to longer backoff
+                    retry_after = e.response.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            wait = float(retry_after)
+                        except (ValueError, TypeError):
+                            wait = config.RATE_LIMIT_429_DELAY * (2 ** attempt)
+                    else:
+                        wait = config.RATE_LIMIT_429_DELAY * (2 ** attempt)
+                else:
+                    wait = 2 ** attempt
+
                 print(f"  [retry {attempt + 1}/{config.MAX_RETRIES}] {url} failed: {e}. Waiting {wait}s...")
                 time.sleep(wait)
             else:
@@ -355,8 +371,8 @@ def scrape_all_products(
         results.append(transformed)
         print(f"    → {transformed['title']} | {transformed['price'] or 'N/A'}")
 
-        # Be polite
-        time.sleep(0.3)
+        # Be polite — rate limit between requests
+        time.sleep(config.RATE_LIMIT_DELAY)
 
     print(f"\n[scraper] Successfully scraped {len(results)} products.")
     return results

@@ -66,6 +66,10 @@ REQUEST_TIMEOUT = 30
 MAX_RETRIES = 3
 SHOPIFY_PAGE_LIMIT = 250  # max products per page from Shopify API
 
+# Rate limiting — Shopify can be aggressive about 429s
+RATE_LIMIT_DELAY = 0.6  # seconds between individual product API requests
+RATE_LIMIT_429_DELAY = 5.0  # base seconds to wait on 429 before retrying
+
 # --- Database ---
 DB_BATCH_SIZE = 50  # products per batch insert
 DB_UPSERT_RETRIES = 3
