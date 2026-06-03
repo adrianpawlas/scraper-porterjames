@@ -85,8 +85,8 @@ class SigLipEmbedder:
         """
         all_embeddings = []
 
-        for i in range(0, len(images), config.BATCH_SIZE):
-            batch = images[i : i + config.BATCH_SIZE]
+        for i in range(0, len(images), config.EMBEDDING_BATCH_SIZE):
+            batch = images[i : i + config.EMBEDDING_BATCH_SIZE]
             try:
                 inputs = self.processor(images=batch, return_tensors="pt").to(self.device)
                 with torch.no_grad():
@@ -107,8 +107,8 @@ class SigLipEmbedder:
         """
         all_embeddings = []
 
-        for i in range(0, len(texts), config.BATCH_SIZE * 2):  # text is cheaper than images
-            batch = texts[i : i + config.BATCH_SIZE * 2]
+        for i in range(0, len(texts), config.EMBEDDING_BATCH_SIZE * 2):  # text is cheaper than images
+            batch = texts[i : i + config.EMBEDDING_BATCH_SIZE * 2]
             try:
                 inputs = self.processor(
                     text=batch,
@@ -131,6 +131,7 @@ class SigLipEmbedder:
 def add_embeddings_to_products(
     products: List[Dict],
     embedder: SigLipEmbedder,
+    stagger_delay: float = config.EMBEDDING_STAGGER_DELAY,
 ) -> List[Dict]:
     """Download product images and generate embeddings for each product.
 
@@ -138,16 +139,28 @@ def add_embeddings_to_products(
     - Downloads the main image and generates image_embedding
     - Generates info_embedding from the text info
 
+    Args:
+        products: List of product dicts (will be mutated in place).
+        embedder: Initialized SigLipEmbedder instance.
+        stagger_delay: Seconds to wait between batches (rate limiting).
+
     Returns the products list with embeddings filled in.
     """
+    products_to_embed = [p for p in products if p.get("_needs_embedding")]
+    if not products_to_embed:
+        print(f"[embedder] All {len(products)} products unchanged — skipping embeddings entirely.")
+        # Even though we skip, ensure the unchanged products preserve existing embeddings
+        return products
+
+    skip_count = len(products) - len(products_to_embed)
+    print(f"[embedder] Embedding {len(products_to_embed)} products ({skip_count} unchanged, skipped)")
+
     # --- Step 1: Generate info embeddings (text) — faster, do first ---
-    print(f"\n[embedder] Generating text embeddings for {len(products)} products...")
+    print(f"\n[embedder] Generating text embeddings for {len(products_to_embed)} products...")
     info_texts = []
-    for p in products:
-        # Use pre-built _info_text from scraper if available
+    for p in products_to_embed:
         text = p.get("_info_text", "")
         if not text:
-            # Fallback: build from fields
             title = p.get("title", "")
             desc = p.get("description", "")
             price = p.get("price", "")
@@ -171,15 +184,17 @@ def add_embeddings_to_products(
         info_texts.append(text)
 
     info_embeddings = embedder.embed_texts(info_texts)
-    for p, emb in zip(products, info_embeddings):
+    for p, emb in zip(products_to_embed, info_embeddings):
         p["info_embedding"] = emb
 
     # --- Step 2: Download product images ---
-    print(f"\n[embedder] Downloading main product images for embedding...")
+    print(f"\n[embedder] Downloading product images for {len(products_to_embed)} products...")
     image_urls = []
     url_to_product_indices: Dict[str, List[int]] = {}
 
     for idx, p in enumerate(products):
+        if not p.get("_needs_embedding"):
+            continue
         url = p.get("image_url", "")
         if url:
             image_urls.append(url)
@@ -187,12 +202,14 @@ def add_embeddings_to_products(
                 url_to_product_indices[url] = []
             url_to_product_indices[url].append(idx)
 
-    # Remove duplicates
     unique_urls = list(set(image_urls))
     print(f"  [embedder] Downloading {len(unique_urls)} unique images...")
 
     downloaded = download_images_parallel(unique_urls)
     print(f"  [embedder] Successfully downloaded {len(downloaded)}/{len(unique_urls)} images")
+
+    if stagger_delay > 0:
+        time.sleep(stagger_delay)
 
     # --- Step 3: Generate image embeddings ---
     print(f"\n[embedder] Generating image embeddings...")
@@ -209,16 +226,22 @@ def add_embeddings_to_products(
         for url, emb in zip(image_url_order, image_embeddings):
             for idx in url_to_product_indices.get(url, []):
                 products[idx]["image_embedding"] = emb
-                # Also set compressed_image_url to the same URL for now
-                # (Shopify's CDN supports ?width=xxx for smaller versions if needed)
                 if not products[idx].get("compressed_image_url"):
                     products[idx]["compressed_image_url"] = url
+
+        if stagger_delay > 0:
+            time.sleep(stagger_delay)
 
     # Log stats
     embedded_count = sum(1 for p in products if p.get("image_embedding"))
     text_embedded_count = sum(1 for p in products if p.get("info_embedding"))
     print(f"  [embedder] Image embeddings: {embedded_count}/{len(products)} products")
     print(f"  [embedder] Text embeddings: {text_embedded_count}/{len(products)} products")
+
+    # Clean up internal fields before returning
+    for p in products:
+        p.pop("_needs_embedding", None)
+        p.pop("_info_text", None)
 
     return products
 

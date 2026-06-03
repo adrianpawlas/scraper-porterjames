@@ -58,19 +58,26 @@ SUPABASE_TABLE = "products"
 # --- Embedding Model ---
 EMBEDDING_MODEL = "google/siglip-base-patch16-384"
 EMBEDDING_DIM = 768
-BATCH_SIZE = 8  # images per batch for embedding
+EMBEDDING_BATCH_SIZE = 8  # images per batch for embedding
+EMBEDDING_STAGGER_DELAY = 0.5  # seconds between embedding calls
 
 # --- Scraping ---
 REQUEST_TIMEOUT = 30
 MAX_RETRIES = 3
 SHOPIFY_PAGE_LIMIT = 250  # max products per page from Shopify API
 
+# --- Database ---
+DB_BATCH_SIZE = 50  # products per batch insert
+DB_UPSERT_RETRIES = 3
+STALE_THRESHOLD_RUNS = 2  # number of consecutive runs missed before deletion
+
 # --- Currency Conversion ---
-# Since the store uses CZK and user wants EUR/USD primarily.
-# We'll fetch live rates from frankfurter.app (free, no API key needed).
 EXCHANGE_RATE_API = "https://api.frankfurter.app/latest?from=NZD&to=EUR,USD"
 
 # --- Paths ---
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".data")
 IMAGES_DIR = os.path.join(DATA_DIR, "images")
+STATE_FILE = os.path.join(DATA_DIR, "scraper_state.json")
+FAILED_PRODUCTS_LOG = os.path.join(DATA_DIR, "failed_products.log")
+
 os.makedirs(IMAGES_DIR, exist_ok=True)
